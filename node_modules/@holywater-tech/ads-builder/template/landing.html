@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>{title}</title>
+        <meta charset='UTF-8'>
+        <meta name='viewport' content='width = device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'>
+        <meta name='HandheldFriendly' content='True'>
+        <meta name='apple-mobile-web-app-status-bar-style' content='black-translucent'>
+        <meta name='apple-mobile-web-app-capable' content='yes'>
+        <meta http-equiv='cleartype' content='on'>
+        <meta name='ad.size' content='width=320,height=480'>
+        <script>{resources}{engine}{code}</script>
+        
+        <script>
+            function uuidv4() {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(
+                    /[xy]/g,
+                    function (c) {
+                        var r = (Math.random() * 16) | 0,
+                            v = c == 'x' ? r : (r & 0x3) | 0x8
+                        return v.toString(16)
+                    },
+                )
+            }
+            let id = uuidv4()
+            window.id = id
+            !(function (f, b, e, v, n, t, s) {
+                if (f.fbq) return
+                n = f.fbq = function () {
+                    n.callMethod
+                        ? n.callMethod.apply(n, arguments)
+                        : n.queue.push(arguments)
+                }
+                if (!f._fbq) f._fbq = n
+                n.push = n
+                n.loaded = !0
+                n.version = '2.0'
+                n.queue = []
+                t = b.createElement(e)
+                t.async = !0
+                t.src = v
+                s = b.getElementsByTagName(e)[0]
+                s.parentNode.insertBefore(t, s)
+            })(
+                window,
+                document,
+                'script',
+                'https://connect.facebook.net/en_US/fbevents.js',
+            )
+            fbq('init', window.App.facebookPixel, {
+                external_id: window.id,
+            })
+            fbq('track', 'PageView')
+            window.fbq = fbq
+        </script>
+    </head>
+    <body style='background-color: #000000;'>
+        {fonts}
+        <div style='background-color: transparent;' id='loader'></div>
+        <div style='display:none;' id='app'></div>
+        {devCode}
+
+        <script>
+            class OneLinkUrlGenerator {
+        // TODO -  add params documentation
+        // oneLinkURL - your own basic OneLink URL
+        // ...
+        constructor({
+            oneLinkURL,
+            pidKeysList = [],
+            pidStaticValue = null,
+            campaignKeysList = [],
+            campaignStaticValue = null,
+            pidOverrideList = [],
+            gclIdParam = 'af_sub5',
+        } = {}) {
+            if (
+                oneLinkURL === undefined ||
+                typeof oneLinkURL !== 'string' ||
+                oneLinkURL === ''
+            ) {
+                // eslint-disable-next-line no-constructor-return
+                return null
+            }
+    
+            this.oneLinkURL = oneLinkURL
+            ;(this.pidOverrideList = pidOverrideList),
+                (this.gclIdParam = gclIdParam),
+                (this.pidKeysList = pidKeysList),
+                (this.pidStaticValue = pidStaticValue),
+                (this.campaignKeysList = campaignKeysList),
+                (this.campaignStaticValue = campaignStaticValue),
+                // OneLink parameters
+                (this.campaign = getCampaignValue(
+                    this.campaignKeysList,
+                    this.campaignStaticValue,
+                ))
+            this.mediaSource = getMediaSourceValue(
+                this.pidKeysList,
+                this.pidStaticValue,
+                this.pidOverrideList,
+            )
+    
+            // af_js_web=true will be added to every URL that was generated through this script
+            this.afParams = { af_js_web: 'true' }
+        }
+    
+        generateUrl() {
+            if (this.mediaSource == null) {
+                return null
+            }
+    
+            // User was redirected using af_r parameter on an AppsFlyer attribution link
+            if (getParameterFromURL('af_redirect')) {
+                return null // in this case, the original store links in the install buttons stay the same
+            }
+    
+            if (isFacebook()) {
+                // the caller should make sure a return value of null will leave the original link
+                return null
+            }
+    
+            // Google Ads
+            const pidValue = this.mediaSource
+            const gclIdValue = getParameterFromURL('gclid')
+    
+            if (gclIdValue) {
+                this.afParams[this.gclIdParam] = gclIdValue
+                const kwValue = getParameterFromURL('keyword')
+                if (kwValue) {
+                    this.afParams.af_keywords = kwValue
+                }
+                // Other SRNs, custom networks and organic installs
+            } else {
+            }
+            const finalURL = `${this.oneLinkURL}?pid=${pidValue}&c=${
+                this.campaign
+            }${stringifyAfParameters(this.afParams)}`
+            return finalURL
+        }
+    
+        // Setters for AF params
+        setDeepLinkValue(deepLinkValueParam, deepLinkValue = null) {
+            setGenericParameter(
+                this.afParams,
+                'deep_link_value',
+                deepLinkValueParam,
+                deepLinkValue,
+            )
+        }
+    
+        setChannel(channelParam, channelValue = null) {
+            setGenericParameter(this.afParams, 'af_channel', channelParam, channelValue)
+        }
+    
+        setAdset(adsetParam, adsetValue = null) {
+            setGenericParameter(this.afParams, 'af_adset', adsetParam, adsetValue)
+        }
+    
+        setAd(adParam, adValue = null) {
+            setGenericParameter(this.afParams, 'af_ad', adParam, adValue)
+        }
+    
+        setCustomParameter(searchKey, customKey, customValue = null) {
+            setGenericParameter(this.afParams, customKey, searchKey, customValue)
+        }
+    }
+    
+    // Statis state-less functions
+    // Note - when device ID sharing becomes optional stop calling this method (or always return false)
+    function isFacebook() {
+        if (document.referrer && document.referrer != '') {
+            return document.referrer.toLowerCase().includes('facebook')
+        }
+        return false
+    }
+    
+    function getParameterFromURL(name) {
+        const url = window.location.href
+        name = name.replace(/[\[\]]/g, '\\$&')
+        const regex = new RegExp(`[?&]${name}(=([^&#]*)|&|#|$)`)
+        const results = regex.exec(url)
+        if (!results) return null
+        if (!results[2]) return ''
+        return decodeURIComponent(results[2].replace(/\+/g, ' '))
+    }
+    
+    function getMediaSourceValue(pidKeysList, pidStaticValue, pidOverrideList) {
+        let pidValue = null
+    
+        for (const pidKey of pidKeysList) {
+            if (pidKey != null && getParameterFromURL(pidKey)) {
+                pidValue = getParameterFromURL(pidKey)
+            }
+        }
+    
+        if (pidValue != null) {
+            if (pidOverrideList.hasOwnProperty(pidValue))
+                pidValue = pidOverrideList[pidValue]
+        } else {
+            pidValue = pidStaticValue
+        }
+        return pidValue
+    }
+    
+    function getCampaignValue(campaignKeysList, campaignStaticValue) {
+        for (const campaignKey of campaignKeysList) {
+            if (getParameterFromURL(campaignKey)) {
+                return getParameterFromURL(campaignKey)
+            }
+        }
+    
+        if (campaignStaticValue != null) {
+            return campaignStaticValue
+        }
+    
+        if (document.getElementsByTagName('title')[0]) {
+            return document.getElementsByTagName('title')[0].innerText
+        }
+        return 'unknown'
+    }
+    
+    // Create a string of param and value from
+    function stringifyAfParameters(afParams) {
+        let finalStr = ''
+    
+        for (const key of Object.keys(afParams)) {
+            if (afParams[key] != null) {
+                finalStr += `&${key}=${afParams[key]}`
+            }
+        }
+        return finalStr
+    }
+    
+    function setGenericParameter(
+        afParams,
+        oneLinkParam,
+        searchKey,
+        newParamValue = null,
+    ) {
+        const searchKeyResult = getParameterFromURL(searchKey)
+        if (searchKeyResult) {
+            afParams[oneLinkParam] = searchKeyResult
+        } else if (newParamValue != null) {
+            afParams[oneLinkParam] = newParamValue
+        }
+    }
+    
+    function getTtclid() {
+        const { search } = window.location
+        const params = new URLSearchParams(search)
+        const ttclidFromParams = params.get('ttclid')
+        const ttclidFromLocalStorage = localStorage.getItem('ttclid')
+    
+        return ttclidFromParams || ttclidFromLocalStorage
+    }
+    
+    ;(function () {
+        window.AF = Object.assign(window.AF || {}, {
+            OneLinkUrlGenerator,
+        })
+    })()
+    const onelinkGenerator = new window.AF.OneLinkUrlGenerator({
+        oneLinkURL: window.App.oneLink,
+        pidKeysList: ['af_pid', 'utm_source'],
+        pidStaticValue: 'landing_page',
+        campaignKeysList: ['af_campaign', 'utm_campaign'],
+        campaignStaticValue: 'campaign_error',
+    })
+    onelinkGenerator.setAdset('no_adset', 'adset')
+    onelinkGenerator.setAd('original_url_ad', 'new_ad')
+    
+    function getParameterByName(name, url = window.location.href) {
+        name = name.replace(/[\[\]]/g, '\\$&')
+        const regex = new RegExp(`[?&]${name}(=([^&#]*)|&|#|$)`)
+        const results = regex.exec(url)
+        if (!results) return null
+        if (!results[2]) return ''
+        return decodeURIComponent(results[2].replace(/\+/g, ' '))
+    }
+    function getCookie(cname) {
+        const name = `${cname}=`
+        const decodedCookie = decodeURIComponent(document.cookie)
+        const ca = decodedCookie.split(';')
+        for (let i = 0; i < ca.length; i++) {
+            let c = ca[i]
+            while (c.charAt(0) == ' ') {
+                c = c.substring(1)
+            }
+            if (c.indexOf(name) == 0) {
+                return c.substring(name.length, c.length)
+            }
+        }
+        return ''
+    }
+    setTimeout(() => {
+        const event_source_url = `${window.location.protocol}//${window.location.hostname}${window.location.pathname}`
+        const fbp = getCookie('_fbp')
+        const fbc = getCookie('_fbc')
+        const { userAgent } = window.navigator
+        const taboolaClickId = getParameterFromURL('taboola_clid')
+        const utmSource = getParameterFromURL('utm_source')
+    
+        const ttp = getCookie('_ttp')
+        const ttclid = getTtclid()
+        // const tt_pixel = window.config.tiktokPixel
+    
+        try {
+            fetch(
+                'https://ipgeolocation.abstractapi.com/v1/?api_key=1c4acaa10922477bb9fb47f82a780a0b',
+            )
+                .then(res => res.json())
+                .then(res => {
+                    const ip = res.ip_address
+                    const ct = res.city?.toLowerCase()
+                    const country = res.country_code?.toLowerCase()
+    
+                    if (utmSource == 'taboola_int') {
+                        const site_id = getParameterFromURL('site_id')
+                        const campaign_name = getParameterFromURL('utm_campaign')
+                        const campaign_item_id = getParameterFromURL('campaign_item_id')
+                        const site = getParameterFromURL('site')
+                        const platform = getParameterFromURL('platform')
+                        const campaign_id = getParameterFromURL('campaign_id')
+                        const taboola_clid = getParameterFromURL('taboola_clid')
+    
+                        const params = {
+                            pid: 'taboola_int',
+                            af_siteid: site_id,
+                            c: campaign_name,
+                            af_ad_id: campaign_item_id,
+                            af_sub1: site,
+                            af_sub2: platform,
+                            af_c_id: campaign_id,
+                            af_click_lookback: '7d',
+                            clickid: taboola_clid,
+                        }
+    
+                        const query = Object.entries(params)
+                            .filter(([k, v]) => !!v)
+                            .map(v => v.join('='))
+                            .join('&')
+                        const link = `https://app.appsflyer.com/id1568149521?${query}`
+    
+                        window.isDone = true
+                        window.generateUrl = link
+                        window.campaign = campaign_name
+                        return
+                    }
+    
+                    const params = {
+                        fbc,
+                        fbp,
+                        external_id: window.id,
+                        fb_pixel: window.App.facebookPixel ,
+                        event_source_url,
+                        client_user_agent: userAgent,
+                        client_ip_address: ip,
+                        ct,
+                        country,
+                        taboola_clid: taboolaClickId,
+                        ttp,
+                        ttclid,
+                        // tt_pixel,
+                    }
+    
+                    const query = Object.entries(params)
+                        .filter(([k, v]) => !!v)
+                        .map(v => v.join('='))
+                        .join('&')
+    
+                    const link = `data?${query}`
+    
+                    onelinkGenerator.setDeepLinkValue(
+                        'original_url_deeplinkvalue',
+                        encodeURIComponent(link),
+                    )
+                    onelinkGenerator.setCustomParameter(
+                        'value_for_af_dp',
+                        'af_dp',
+                        encodeURIComponent(link),
+                    )
+                    window.isDone = true
+                    window.generateUrl = onelinkGenerator.generateUrl()
+                    window.campaign = onelinkGenerator.campaign
+                })
+        } catch (e) {
+            if (utmSource == 'taboola_int') {
+                const site_id = getParameterFromURL('site_id')
+                const campaign_name = getParameterFromURL('utm_campaign')
+                const campaign_item_id = getParameterFromURL('campaign_item_id')
+                const site = getParameterFromURL('site')
+                const platform = getParameterFromURL('platform')
+                const campaign_id = getParameterFromURL('campaign_id')
+                const taboola_clid = getParameterFromURL('taboola_clid')
+    
+                const params = {
+                    pid: 'taboola_int',
+                    af_siteid: site_id,
+                    c: campaign_name,
+                    af_ad_id: campaign_item_id,
+                    af_sub1: site,
+                    af_sub2: platform,
+                    af_c_id: campaign_id,
+                    af_click_lookback: '7d',
+                    clickid: taboola_clid,
+                }
+    
+                const query = Object.entries(params)
+                    .filter(([k, v]) => !!v)
+                    .map(v => v.join('='))
+                    .join('&')
+                const link = `https://app.appsflyer.com/id1568149521?${query}`
+    
+                window.isDone = true
+                window.generateUrl = link
+                window.campaign = campaign_name
+                return
+            }
+    
+            const link = `data?fbc=${fbc}&fbp=${fbp}&external_id=${
+                window.id
+            }&fb_pixel=${window.App.facebookPixel.join(
+                ',',
+            )}&event_source_url=${event_source_url}&client_user_agent=${userAgent}${
+                taboolaClickId ? `&taboola_clid=${taboolaClickId}` : ''
+            }`
+            onelinkGenerator.setDeepLinkValue(
+                'original_url_deeplinkvalue',
+                encodeURIComponent(link),
+            )
+            onelinkGenerator.setCustomParameter(
+                'value_for_af_dp',
+                'af_dp',
+                encodeURIComponent(link),
+            )
+            window.generateUrl = onelinkGenerator.generateUrl()
+            window.isDone = true
+        }
+    }, 50)
+    
+        </script>
+    </body>
+</html>
